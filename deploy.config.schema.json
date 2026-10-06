@@ -1,0 +1,229 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/your-account/iis-deploy-kit/deploy.config.schema.json",
+  "title": "iis-deploy-kit configuration",
+  "description": "Single configuration file for iis-deploy-kit (ASP.NET Core API + SPA + PostgreSQL on Windows Server with IIS). Contains NO secrets: it is packaged and copied to the server.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kitVersion", "appName", "domains", "database", "downloads", "api", "migrations", "frontend"],
+  "definitions": {
+    "hostName": {
+      "type": "string",
+      "pattern": "^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$",
+      "description": "Lower-case DNS host name without scheme, port or path."
+    },
+    "sha256": { "type": "string", "pattern": "^[0-9A-Fa-f]{64}$" },
+    "sha512": { "type": "string", "pattern": "^[0-9A-Fa-f]{128}$" },
+    "httpsUrl": { "type": "string", "pattern": "^https://[^\\s]+$" },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Path relative to the folder that contains deploy.config.json."
+    },
+    "sqlIdentifier": {
+      "type": "string",
+      "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+      "description": "Lower-case PostgreSQL identifier (letters, digits, underscore)."
+    },
+    "iisName": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}$"
+    },
+    "envKey": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+    },
+    "retentionDays": { "type": "integer", "minimum": 1, "maximum": 3650 }
+  },
+  "properties": {
+    "$schema": { "type": "string" },
+    "kitVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Kit version this file was written for. The major version must match the scripts' version."
+    },
+    "appName": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9-]{1,39}$",
+      "description": "Short application name. Drives the server folder (C:\\<appName>), IIS site/pool names, the event log source, firewall rules, scheduled tasks and the package file name."
+    },
+    "domains": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["web", "api"],
+      "properties": {
+        "web": { "$ref": "#/definitions/hostName", "description": "Canonical web host, e.g. example.com. Every other host of the web site redirects here." },
+        "webAliases": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/hostName" },
+          "uniqueItems": true,
+          "default": [],
+          "description": "Extra web hosts bound to the web site and permanently redirected to the canonical host, e.g. www.example.com."
+        },
+        "api": { "$ref": "#/definitions/hostName", "description": "API host, e.g. api.example.com." }
+      }
+    },
+    "server": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "root": {
+          "type": "string",
+          "pattern": "^[A-Za-z]:\\\\[^<>:\"/|?*]+$",
+          "description": "Server root folder. Default: C:\\<appName>."
+        },
+        "apiSiteName": { "$ref": "#/definitions/iisName", "description": "Default: '<appName> API'." },
+        "webSiteName": { "$ref": "#/definitions/iisName", "description": "Default: '<appName> Web'." },
+        "apiPoolName": { "$ref": "#/definitions/iisName", "description": "Default: '<appName>Api'." },
+        "webPoolName": { "$ref": "#/definitions/iisName", "description": "Default: '<appName>Web'." },
+        "eventLogSource": { "$ref": "#/definitions/iisName", "description": "Windows Event Log source of the API. Default: '<appName> API'." },
+        "keepReleases": { "type": "integer", "minimum": 2, "maximum": 50, "default": 5, "description": "Releases (and packages) kept per component. The active and the previous release are always kept." },
+        "maxRequestBodyMb": { "type": "integer", "minimum": 1, "maximum": 4000, "default": 20, "description": "IIS request size limit of the API (requestLimits/maxAllowedContentLength)." },
+        "backupTime": { "type": "string", "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$", "default": "04:00", "description": "Daily backup time (server local time, HH:mm)." },
+        "alwaysRunning": {
+          "type": "boolean",
+          "default": true,
+          "description": "API pool keeps running without traffic (AlwaysRunning, idle timeout 0, no periodic recycling, no overlapping recycle, preload). Required for background workers/hosted services."
+        }
+      }
+    },
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "role", "postgres"],
+      "properties": {
+        "name": { "$ref": "#/definitions/sqlIdentifier" },
+        "role": { "$ref": "#/definitions/sqlIdentifier", "description": "Login role that owns the database (NOSUPERUSER, NOCREATEDB, NOCREATEROLE)." },
+        "port": { "type": "integer", "minimum": 1024, "maximum": 65535, "default": 5432 },
+        "postgres": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["majorVersion", "installerVersion"],
+          "properties": {
+            "majorVersion": { "type": "integer", "minimum": 17, "maximum": 99, "description": "PostgreSQL major version (17+: the database is created with the builtin C.UTF-8 locale provider)." },
+            "installerVersion": { "type": "string", "pattern": "^\\d+\\.\\d+-\\d+$", "description": "EDB Windows installer version, e.g. 18.6-2. Must start with majorVersion." },
+            "installerUrl": { "$ref": "#/definitions/httpsUrl", "description": "Default: https://get.enterprisedb.com/postgresql/postgresql-<installerVersion>-windows-x64.exe" },
+            "installerSha256": { "$ref": "#/definitions/sha256", "description": "Strongly recommended. Without it only the Authenticode signature is checked." },
+            "signer": { "type": "string", "default": "EnterpriseDB Corporation", "description": "Expected Authenticode organization (O=)." }
+          }
+        }
+      }
+    },
+    "downloads": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hostingBundle", "urlRewrite", "winAcme"],
+      "properties": {
+        "hostingBundle": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["version"],
+          "properties": {
+            "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$", "description": "ASP.NET Core Hosting Bundle version, e.g. 10.0.12." },
+            "url": { "$ref": "#/definitions/httpsUrl", "description": "Optional. When url/sha512 are omitted they are read from Microsoft's official release metadata (releases.json)." },
+            "sha512": { "$ref": "#/definitions/sha512" },
+            "signer": { "type": "string", "default": "Microsoft Corporation" }
+          }
+        },
+        "urlRewrite": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["url", "sha256"],
+          "properties": {
+            "url": { "$ref": "#/definitions/httpsUrl" },
+            "sha256": { "$ref": "#/definitions/sha256" },
+            "signer": { "type": "string", "default": "Microsoft Corporation" }
+          }
+        },
+        "winAcme": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["version", "url", "sha256"],
+          "properties": {
+            "version": { "type": "string", "pattern": "^\\d+(\\.\\d+){1,3}$" },
+            "url": { "$ref": "#/definitions/httpsUrl", "description": "x64 zip from the official GitHub releases (wacs.exe is not Authenticode-signed; the pinned hash is the check)." },
+            "sha256": { "$ref": "#/definitions/sha256" }
+          }
+        }
+      }
+    },
+    "api": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["project"],
+      "properties": {
+        "project": { "$ref": "#/definitions/relativePath", "description": "API .csproj, relative to this file." },
+        "assemblyName": { "type": "string", "description": "Main assembly (without .dll). Default: project file name." },
+        "runtimeIdentifier": { "type": "string", "enum": ["win-x64", "win-arm64"], "default": "win-x64" },
+        "healthPath": { "type": "string", "pattern": "^/[^\\s?#]*$", "default": "/api/health", "description": "Anonymous endpoint that returns 200 when the API (and its database) is healthy." },
+        "connectionStringKey": { "$ref": "#/definitions/envKey", "default": "ConnectionStrings__Default", "description": "Key of the database connection string in app.env (used by backups, restores and migrations)." },
+        "requiredEnvKeys": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/envKey" },
+          "uniqueItems": true,
+          "default": [],
+          "description": "Keys that must be present and non-empty in app.env (the connection string key is always required)."
+        },
+        "minLengthEnvKeys": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 1 },
+          "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+          "default": {},
+          "description": "Minimum value length per key, e.g. { \"Jwt__SigningKey\": 32 }. Checked only when the key is present."
+        },
+        "envTemplate": { "$ref": "#/definitions/relativePath", "description": "Your app.env template, relative to this file. Default: the kit's templates/app.env.example." },
+        "excludeFromPackage": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["appsettings.Development.json"],
+          "description": "Files or folders (relative to the publish output) removed before packaging."
+        }
+      }
+    },
+    "migrations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean", "description": "Build an EF Core migrations bundle and run it during install-release." },
+        "project": { "$ref": "#/definitions/relativePath", "description": "Project that contains the migrations. Default: api.project." },
+        "startupProject": { "$ref": "#/definitions/relativePath", "description": "Default: api.project." },
+        "context": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_.]*$", "description": "DbContext class name (required when enabled)." },
+        "connectionEnvVar": { "$ref": "#/definitions/envKey", "description": "Optional extra environment variable that receives the connection string while the bundle runs (e.g. read by your IDesignTimeDbContextFactory). All app.env values are always passed as process environment variables." }
+      }
+    },
+    "frontend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "path": { "$ref": "#/definitions/relativePath", "description": "Frontend folder (package.json), relative to this file." },
+        "installCommand": { "type": "string", "default": "npm ci --no-audit --no-fund", "description": "Run through cmd.exe in the frontend folder. Empty string = skip." },
+        "buildCommand": { "type": "string", "default": "npm run build" },
+        "outputDir": { "type": "string", "default": "dist", "description": "Build output folder, relative to the frontend folder." },
+        "apiBaseUrlEnvVar": { "$ref": "#/definitions/envKey", "default": "VITE_API_BASE_URL", "description": "Environment variable that receives https://<domains.api> during the build." },
+        "verifyApiUrlInBundle": { "type": "boolean", "default": true, "description": "Fail the build when the API URL is not found in the built JavaScript." },
+        "spaCheckPath": { "type": "string", "pattern": "^/[^\\s?#]*$", "default": "/deploy-kit-spa-check", "description": "A client-side route that is NOT a file; after install it must return index.html (SPA fallback works)." }
+      }
+    },
+    "backup": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dailyRetentionDays": { "$ref": "#/definitions/retentionDays", "default": 14 },
+        "preDeployRetentionDays": { "$ref": "#/definitions/retentionDays", "default": 30 },
+        "manualRetentionDays": { "$ref": "#/definitions/retentionDays", "default": 30 },
+        "storageRetentionDays": { "$ref": "#/definitions/retentionDays", "default": 28 },
+        "iisLogRetentionDays": { "$ref": "#/definitions/retentionDays", "default": 90 },
+        "scriptLogRetentionDays": { "$ref": "#/definitions/retentionDays", "default": 60 },
+        "storageArchiveDay": {
+          "type": "string",
+          "enum": ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Never"],
+          "default": "Sunday",
+          "description": "Weekday on which the daily backup also zips the storage folder."
+        }
+      }
+    }
+  }
+}

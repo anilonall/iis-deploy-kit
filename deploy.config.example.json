@@ -1,0 +1,78 @@
+{
+  "$schema": "./deploy.config.schema.json",
+  "kitVersion": "1.0.0",
+  "appName": "MyApp",
+  "domains": {
+    "web": "example.com",
+    "webAliases": [ "www.example.com" ],
+    "api": "api.example.com"
+  },
+  "server": {
+    "keepReleases": 5,
+    "maxRequestBodyMb": 20,
+    "backupTime": "04:00",
+    "alwaysRunning": true
+  },
+  "database": {
+    "name": "myapp",
+    "role": "myapp",
+    "port": 5432,
+    "postgres": {
+      "majorVersion": 18,
+      "installerVersion": "18.6-2",
+      "installerSha256": "5DE1182B7F8C823C6BE13D9DE9A5BCA56D1D856AE18E1029AFBD8EF3BA5573D6",
+      "signer": "EnterpriseDB Corporation"
+    }
+  },
+  "downloads": {
+    "hostingBundle": {
+      "version": "10.0.12",
+      "url": "https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/10.0.12/dotnet-hosting-10.0.12-win.exe",
+      "sha512": "ccfb101fc9287e2e10f16e68957a52778463a266d0ea9dc36df1c635ae2396cefba818146d1008f3d8540b90869eaa6fb59bdc4044bd532fe1f30bb26048ad68",
+      "signer": "Microsoft Corporation"
+    },
+    "urlRewrite": {
+      "url": "https://download.microsoft.com/download/1/2/8/128E2E22-C1B9-44A4-BE2A-5859ED1D4592/rewrite_amd64_en-US.msi",
+      "sha256": "37342FF2F585F263F34F48E9DE59EB1051D61015A8E967DBDE4075716230A32A",
+      "signer": "Microsoft Corporation"
+    },
+    "winAcme": {
+      "version": "2.2.9.1701",
+      "url": "https://github.com/win-acme/win-acme/releases/download/v2.2.9.1701/win-acme.v2.2.9.1701.x64.trimmed.zip",
+      "sha256": "F4DC3B144841FFDBA391CE168C273D7A686D45A359075E30EE4BF4EE186857D6"
+    }
+  },
+  "api": {
+    "project": "src/MyApp.Api/MyApp.Api.csproj",
+    "healthPath": "/api/health",
+    "connectionStringKey": "ConnectionStrings__Default",
+    "requiredEnvKeys": [ "Cors__AllowedOrigins__0" ],
+    "minLengthEnvKeys": { "Jwt__SigningKey": 32 },
+    "excludeFromPackage": [ "appsettings.Development.json" ]
+  },
+  "migrations": {
+    "enabled": true,
+    "project": "src/MyApp.Infrastructure/MyApp.Infrastructure.csproj",
+    "startupProject": "src/MyApp.Api/MyApp.Api.csproj",
+    "context": "AppDbContext"
+  },
+  "frontend": {
+    "enabled": true,
+    "path": "../myapp-frontend",
+    "installCommand": "npm ci --no-audit --no-fund",
+    "buildCommand": "npm run build",
+    "outputDir": "dist",
+    "apiBaseUrlEnvVar": "VITE_API_BASE_URL",
+    "verifyApiUrlInBundle": true,
+    "spaCheckPath": "/deploy-kit-spa-check"
+  },
+  "backup": {
+    "dailyRetentionDays": 14,
+    "preDeployRetentionDays": 30,
+    "manualRetentionDays": 30,
+    "storageRetentionDays": 28,
+    "iisLogRetentionDays": 90,
+    "scriptLogRetentionDays": 60,
+    "storageArchiveDay": "Sunday"
+  }
+}

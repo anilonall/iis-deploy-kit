@@ -1,0 +1,24 @@
+# .NET
+bin/
+obj/
+*.user
+.vs/
+
+# Node / frontend builds
+node_modules/
+dist/
+out/
+
+# Packages produced by build-package.ps1
+artifacts/
+*.zip
+*.sha256
+
+# Local environment files (may contain secrets)
+.env*
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

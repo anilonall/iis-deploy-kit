@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # Windows PowerShell 5.1 (the server's PowerShell) is available on the Windows runners.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: sample/frontend/package-lock.json
+
+      - name: PowerShell parse check (Windows PowerShell 5.1)
+        shell: powershell
+        run: |
+          $failed = 0
+          Get-ChildItem -Path scripts, tests -Recurse -File -Include *.ps1, *.psm1 | ForEach-Object {
+            $tokens = $null; $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors)
+            foreach ($e in $errors) { Write-Host "$($_.Name):$($e.Extent.StartLineNumber): $($e.Message)"; $failed++ }
+          }
+          if ($failed -gt 0) { exit 1 }
+          Write-Host 'No parse errors.'
+
+      - name: PSScriptAnalyzer
+        shell: powershell
+        run: |
+          if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer)) {
+            Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Scope CurrentUser -Force | Out-Null
+            Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+            Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force
+          }
+          $results = @('scripts', 'tests' | ForEach-Object { Invoke-ScriptAnalyzer -Path $_ -Recurse -Settings .\PSScriptAnalyzerSettings.psd1 })
+          $results | Format-Table RuleName, Severity, ScriptName, Line, Message -AutoSize -Wrap
+          if ($results.Count -gt 0) { exit 1 }
+
+      - name: Kit tests (tr-TR culture)
+        shell: powershell
+        run: .\tests\DeployKit.Tests.ps1
+
+      - name: Validate configuration files
+        shell: powershell
+        run: |
+          .\scripts\test-config.ps1 -Config .\deploy.config.example.json
+          .\scripts\test-config.ps1 -Config .\sample\deploy.config.json
+
+      - name: JSON schema
+        run: npx --yes ajv-cli@5 validate -s deploy.config.schema.json -d deploy.config.example.json -d sample/deploy.config.json
+
+      - name: Build sample backend
+        run: dotnet build sample/backend/TodoApi/TodoApi.csproj -c Release
+
+      - name: Build sample frontend
+        working-directory: sample/frontend
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: Build release package (sample)
+        shell: powershell
+        run: .\scripts\build-package.ps1 -Config .\sample\deploy.config.json -SkipFrontendInstall
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sample-package
+          path: |
+            sample/artifacts/*.zip
+            sample/artifacts/*.zip.sha256
+          retention-days: 7
