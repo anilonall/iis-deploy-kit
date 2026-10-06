@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/your-account/iis-deploy-kit/deploy.config.schema.json",
+  "$id": "https://github.com/anilonall/iis-deploy-kit/deploy.config.schema.json",
   "title": "iis-deploy-kit configuration",
   "description": "Single configuration file for iis-deploy-kit (ASP.NET Core API + SPA + PostgreSQL on Windows Server with IIS). Contains NO secrets: it is packaged and copied to the server.",
   "type": "object",
