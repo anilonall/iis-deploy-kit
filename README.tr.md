@@ -24,8 +24,86 @@ her sorun ilk günden düzeltilmiş olarak gelir: [docs/lessons-learned.md](docs
 - **Sırlar sunucudan çıkmaz**: korumalı tek bir `app.env` → IIS uygulama havuzu ortam değişkenleri.
   Pakette, site klasöründe veya `web.config`'te sır yoktur ve hiçbir değer ekrana yazılmaz.
 
+## Kendi projenizde kullanma
+
+### 1. Kiti indirin
+
+```powershell
+git clone https://github.com/anilonall/iis-deploy-kit.git
+```
+
+ya da GitHub'da **Code → Download ZIP**.
+
+### 2. (İsteğe bağlı) Önce örnekle deneyin
+
+Kit küçük, çalışan bir örnek uygulamayla gelir (`sample/`: .NET API + React). Kendi projenize
+dokunmadan önce kitin ne ürettiğini görmek için ondan bir paket üretin:
+
+```powershell
+cd iis-deploy-kit
+.\scripts\build-package.ps1 -Config .\sample\deploy.config.json
+# -> sample\artifacts\<uygulama>-<sürüm>.zip  (içine bakın: api\, web\, efbundle.exe, scripts\, manifest.json)
+```
+
+### 3. Kiti deponuza kopyalayın
+
+`scripts/` ve `templates/` klasörlerini deponuzdaki bir klasöre kopyalayın ve yanına
+`deploy.config.example.json`'dan bir `deploy.config.json` oluşturun. SPA'nın `web.config`
+dosyasını frontend'inizin `public/` klasörüne koyun ki derleme çıktısına girsin:
+
+```
+sizin-deponuz/
+├── src/MyApp.Api/                <- ASP.NET Core API'niz (+ EF Core migration'ları)
+├── frontend/
+│   └── public/web.config         <- templates/spa/web.config'ten kopyalandı
+└── deploy/iis/
+    ├── deploy.config.json        <- deploy.config.example.json'dan kopyalanıp düzenlendi
+    ├── scripts/                  <- olduğu gibi kopyalandı
+    └── templates/                <- olduğu gibi kopyalandı
+```
+
+İsterseniz `deploy.config.schema.json`'ı da kopyalayıp `"$schema"` ile gösterin; düzenleyicide
+otomatik tamamlama çalışır.
+
+### 4. Uygulamanızın uyduğunu kontrol edin
+
+Betikler uygulamanız hakkında birkaç varsayımda bulunur. Çoğu ASP.NET Core + Vite projesi bunları
+zaten karşılar:
+
+| Uygulamanızda olması gereken | Neden | Ayar anahtarı |
+|---|---|---|
+| Bağlantı dizesini yapılandırmadan okuması (ör. `ConnectionStrings:Default`) | Sunucu ayarları ortam değişkeni olarak verir (`ConnectionStrings__Default`) | `api.connectionStringKey` |
+| API ve veritabanı sağlıklıyken 200 dönen, girişsiz bir sağlık adresi | Her kurulum, geri alma, ayar değişikliği ve yeniden başlatma sonrası kontrol edilir | `api.healthPath` |
+| EF Core migration'ları (ya da hiç yok) | `efbundle.exe` olarak paketlenir, geçişten önce uygulanır | `migrations.*` (atlamak için `enabled: false`) |
+| SPA'nın API adresini derleme zamanı değişkeninden okuması | Derleme bunu `https://<domains.api>` yapar | `frontend.apiBaseUrlEnvVar` (ör. `VITE_API_BASE_URL`) |
+| Web ve API farklı adreslerdeyse CORS'un web adresine izin vermesi | Tarayıcı istekleri `https://<domains.web>`'den gelir | `api.requiredEnvKeys` ve `templates/app.env.example`'a ekleyin |
+
+Uygulamanızın içine kit kodu girmez; kit yalnızca uygulamanızın etrafında çalışır.
+
+### 5. `deploy.config.json`'ı doldurun
+
+Temel alanlar: `appName`, `domains` (`web`, `webAliases`, `api`), `api.project` (`.csproj`
+dosyanız), `migrations.context`, `frontend.path` ve `database.name`. Yollar ayar dosyasının
+kendi klasörüne göredir. Tüm anahtarlar: [docs/configuration.md](docs/configuration.md).
+Doğrulayın:
+
+```powershell
+.\deploy\iis\scripts\test-config.ps1 -Config .\deploy\iis\deploy.config.json
+```
+
+### 6. İlk paketi üretin ve yayınlayın
+
+```powershell
+.\deploy\iis\scripts\build-package.ps1 -Config .\deploy\iis\deploy.config.json
+```
+
+Ardından [Hızlı başlangıç](#hızlı-başlangıç) 3. adımdan (sunucuya kopyalama) devam edin. Sonraki
+sürümlerde yalnızca **paketi üret -> kopyala -> `install-release.ps1`** tekrarlanır
+([Güncelleme](#güncelleme)).
+
 ## İçindekiler
 
+- [Kendi projenizde kullanma](#kendi-projenizde-kullanma)
 - [Mimari](#mimari)
 - [Ön koşullar](#ön-koşullar)
 - [Depo yapısı](#depo-yapısı)
@@ -120,10 +198,7 @@ iis-deploy-kit/
 └── docs/                            ayar başvurusu, çıkarılan dersler (İngilizce)
 ```
 
-Kendi projenizde: `scripts/` ve `templates/` klasörlerini deponuza kopyalayın (ör. `deploy/iis/`),
-yanına `deploy.config.example.json`'dan bir `deploy.config.json` oluşturun, `templates/spa/web.config`
-dosyasını frontend'inizin `public/` klasörüne koyun. `deploy.config.json` içindeki yollar dosyanın
-kendi klasörüne göredir. Tüm anahtarlar: [docs/configuration.md](docs/configuration.md).
+Kendi projenizde kullanmak için: [Kendi projenizde kullanma](#kendi-projenizde-kullanma). Tüm anahtarlar: [docs/configuration.md](docs/configuration.md).
 
 ## Hızlı başlangıç
 

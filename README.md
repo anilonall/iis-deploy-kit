@@ -22,8 +22,85 @@ showed up on the real server is fixed from day one; see [docs/lessons-learned.md
 - **Secrets never leave the server**: one protected `app.env` -> IIS app pool environment variables.
   Nothing secret is in the package, the site folder or `web.config`, and nothing is ever printed.
 
+## Use it in your own project
+
+### 1. Get the kit
+
+```powershell
+git clone https://github.com/anilonall/iis-deploy-kit.git
+```
+
+or **Code → Download ZIP** on GitHub.
+
+### 2. (Optional) Try the sample first
+
+The kit ships with a tiny working app (`sample/`: .NET API + React). Build a package from it to see
+what the kit produces before touching your own project:
+
+```powershell
+cd iis-deploy-kit
+.\scripts\build-package.ps1 -Config .\sample\deploy.config.json
+# -> sample\artifacts\<appname>-<version>.zip  (look inside: api\, web\, efbundle.exe, scripts\, manifest.json)
+```
+
+### 3. Copy the kit into your repository
+
+Copy `scripts/` and `templates/` into a folder of your repository and create a
+`deploy.config.json` next to them from `deploy.config.example.json`. Put the SPA `web.config`
+into your frontend's `public/` folder so it ends up in the build output:
+
+```
+your-repo/
+├── src/MyApp.Api/                <- your ASP.NET Core API (+ EF Core migrations)
+├── frontend/
+│   └── public/web.config         <- copied from templates/spa/web.config
+└── deploy/iis/
+    ├── deploy.config.json        <- copied from deploy.config.example.json, then edited
+    ├── scripts/                  <- copied as-is
+    └── templates/                <- copied as-is
+```
+
+Optionally copy `deploy.config.schema.json` too and point `"$schema"` at it for editor
+autocompletion.
+
+### 4. Check that your app fits
+
+The scripts make a few assumptions about your application. Most ASP.NET Core + Vite projects
+already meet them:
+
+| Your app needs | Why | Config key |
+|---|---|---|
+| Reads its connection string from configuration (e.g. `ConnectionStrings:Default`) | The server passes settings as environment variables (`ConnectionStrings__Default`) | `api.connectionStringKey` |
+| An anonymous health endpoint that returns 200 when the API and database are OK | Checked after every install, rollback, config change and reboot | `api.healthPath` |
+| EF Core migrations (or none) | Packaged as `efbundle.exe` and applied before the switch | `migrations.*` (`enabled: false` to skip) |
+| The SPA reads the API address from a build-time variable | The build sets it to `https://<domains.api>` | `frontend.apiBaseUrlEnvVar` (e.g. `VITE_API_BASE_URL`) |
+| CORS allows the web origin, if web and API are on different hosts | Browser requests come from `https://<domains.web>` | add to `api.requiredEnvKeys` and `templates/app.env.example` |
+
+No kit code ships inside your application; the kit only runs around it.
+
+### 5. Fill in `deploy.config.json`
+
+The essentials: `appName`, `domains` (`web`, `webAliases`, `api`), `api.project` (your `.csproj`),
+`migrations.context`, `frontend.path` and `database.name`. Paths are relative to the config file
+itself. Every key is described in [docs/configuration.md](docs/configuration.md). Validate it:
+
+```powershell
+.\deploy\iis\scripts\test-config.ps1 -Config .\deploy\iis\deploy.config.json
+```
+
+### 6. Build your first package and deploy
+
+```powershell
+.\deploy\iis\scripts\build-package.ps1 -Config .\deploy\iis\deploy.config.json
+```
+
+Then continue with [Quick start](#quick-start) from step 3 (copy to the server). For later
+releases you only repeat **build the package -> copy -> `install-release.ps1`**
+([Updates](#updates)).
+
 ## Contents
 
+- [Use it in your own project](#use-it-in-your-own-project)
 - [Architecture](#architecture)
 - [Prerequisites](#prerequisites)
 - [Repository layout](#repository-layout)
@@ -125,10 +202,7 @@ iis-deploy-kit/
 └── docs/                            configuration reference, lessons learned
 ```
 
-How to use it in your project: copy `scripts/` and `templates/` into your repository (for example
-to `deploy/iis/`), create a `deploy.config.json` next to them from `deploy.config.example.json`,
-copy `templates/spa/web.config` into your frontend's `public/` folder, and commit. Paths inside
-`deploy.config.json` are relative to the file itself.
+Using it in your own project: see [Use it in your own project](#use-it-in-your-own-project).
 
 ## Quick start
 
